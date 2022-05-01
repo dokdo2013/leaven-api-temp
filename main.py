@@ -98,15 +98,21 @@ async def getBroadcast():
 
 
 @app.get("/broadcast/history", status_code=200, tags=["방송정보"], summary="레븐 전체 방송 History")
-async def getBroadcast(start_date: str, end_date: str):
+async def getBroadcast(start_date: str, end_date: str, streamer: str):
     start_date = f"{start_date} 00:00:00"
     end_date = f"{end_date} 23:59:59"
-
-    sql = f"SELECT lh.idx, lh.reg_datetime, l.streamer_name, l.streamer_name_ko, action_type \
-        FROM leaven_history lh \
-        JOIN leaven l on lh.leaven_idx = l.idx \
-        WHERE lh.reg_datetime >= '{start_date}' and lh.reg_datetime <= '{end_date}' \
-        ORDER BY lh.idx asc"
+    if streamer == 'all':
+        sql = f"SELECT lh.idx, lh.reg_datetime, l.streamer_name, l.streamer_name_ko, action_type \
+            FROM leaven_history lh \
+            JOIN leaven l on lh.leaven_idx = l.idx \
+            WHERE lh.reg_datetime >= '{start_date}' and lh.reg_datetime <= '{end_date}' \
+            ORDER BY lh.idx asc"
+    else:
+        sql = f"SELECT lh.idx, lh.reg_datetime, l.streamer_name, l.streamer_name_ko, action_type \
+            FROM leaven_history lh \
+            JOIN leaven l on lh.leaven_idx = l.idx \
+            WHERE lh.reg_datetime >= '{start_date}' and lh.reg_datetime <= '{end_date}' and l.streamer_name = '{streamer}' \
+            ORDER BY lh.idx asc"
 
     res = db.execute(sql)
     data = res.fetchall()
