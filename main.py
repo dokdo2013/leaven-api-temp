@@ -83,6 +83,18 @@ def commonResponse(status_code=200, code='SUCCESS', message='성공', data={}, c
     return response
 
 
+@app.get("/live", status_code=200, tags=["방송정보"], summary="레븐 라이브 정보")
+async def live():
+    sql = "SELECT streamer_name FROM leaven WHERE broadcast_status = 'ON'"
+    info = db.execute(sql)
+    data = info.fetchall()
+    streaming_list = sqlAlchemyRowToDict(data)
+    streamer_list = []
+    for streamer in streaming_list:
+        streamer_list.append(streamer['streamer_name'])
+    return commonResponse(data=streamer_list)
+
+
 @app.get("/broadcast", status_code=200, tags=["방송정보"], summary="레븐 기본 방송정보")
 async def getBroadcast():
     sql = "SELECT idx, streamer_name, streamer_name_ko, broadcast_status, on_broadcast_datetime, off_broadcast_datetime, update_datetime FROM leaven"
