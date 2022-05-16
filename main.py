@@ -181,7 +181,7 @@ async def postGell(gell: gellData):
 
     if csrf_token != gell.csrf_token:
         return commonResponse(401, 'UNAUTHORIZED', 'CSRF 토큰이 일치하지 않습니다. 새로고침해주세요.')
-    elif curr_count < gell.count:
+    elif curr_count > gell.count:
         return commonResponse(400, 'OLD_DATA', '뭔가가 잘못됐어요!')
     else:
         sql1 = f"UPDATE gell SET count = {gell.count}, edit_datetime = '{now}' WHERE name = '{gell.name}'"
