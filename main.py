@@ -92,6 +92,12 @@ class gellName(BaseModel):
     password: str
 
 
+class gellMerge(BaseModel):
+    target_name: str
+    name: str
+    password: str
+
+
 class gellToken(BaseModel):
     name: str
     password: str
@@ -191,6 +197,21 @@ async def postGell(gell: gellData):
         return commonResponse(201)
 
 
+@app.delete('/gell', status_code=200, tags=["gellgell"], summary="gellgell 계정 지우기")
+async def deleteGell(gell: gellToken):
+    sql1 = f"SELECT count(*) as cnt FROM gell WHERE name = '{gell.name}' and password = '{gell.password}'"
+    res = db2.execute(sql1)
+    count = res.fetchone()[0]
+
+    if count > 0:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        sql4 = f"UPDATE gell SET del_stat = 1, del_datetime = '{now}' WHERE name = '{gell.name}'"
+        db2.execute(sql4)
+        return commonResponse(200)
+    else:
+        return commonResponse(404, 'DATA_EMPTY', '아이디/비밀번호를 다시 확인해주세요.')
+
+
 @app.post('/gell/name', status_code=201, tags=["gellgell"], summary="gellgell 이름 설정")
 async def postGellName(gell: gellName):
     sql1 = f"SELECT count(*) as cnt FROM gell WHERE name = '{gell.name}'"
@@ -203,6 +224,40 @@ async def postGellName(gell: gellName):
         sql2 = f"INSERT INTO gell(name, password, count) VALUES('{gell.name}', '{gell.password}', {gell.count})"
         db2.execute(sql2)
         return commonResponse(201)
+
+
+@app.post('/gell/login', status_code=200, tags=["gellgell"], summary="gellgell 로그인")
+async def postGellLogin(gell: gellName):
+    sql1 = f"SELECT count(*) as cnt FROM gell WHERE name = '{gell.name}' and password = '{gell.password}'"
+    res = db2.execute(sql1)
+    count = res.fetchone()[0]
+
+    if count > 0:
+        return commonResponse(200)
+    else:
+        return commonResponse(404, 'DATA_EMPTY', '아이디/비밀번호를 다시 확인해주세요.')
+
+
+@app.post('/gell/merge', status_code=200, tags=["gellgell"], summary="gellgell 계정 합치기")
+async def postGellMerge(gell: gellMerge):
+    sql1 = f"SELECT count(*) as cnt FROM gell WHERE name = '{gell.name}' and password = '{gell.password}'"
+    res = db2.execute(sql1)
+    count = res.fetchone()[0]
+
+    if count > 0:
+        sql2 = f"SELECT (SELECT count FROM gell WHERE name = '{gell.target_name}') as origin_count, (SELECT count FROM gell WHERE name = '{gell.name}') as into_count"
+        res = db2.execute(sql2)
+        data = res.fetchone()
+        sum_count = data[0] + data[1]
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        sql3 = f"UPDATE gell SET count = {sum_count} WHERE name = '{gell.target_name}'"
+        sql4 = f"UPDATE gell SET del_stat = 1, del_datetime = '{now}' WHERE name = '{gell.name}'"
+        db2.execute(sql3)
+        db2.execute(sql4)
+        return commonResponse(200)
+    else:
+        return commonResponse(404, 'DATA_EMPTY', '아이디/비밀번호를 다시 확인해주세요.')
 
 
 @app.post('/gell/token', status_code=200, tags=["gellgell"], summary="gellgell CSRF Token 발급")
@@ -248,7 +303,6 @@ async def getGellIdx(idx: int):
     rank = 0
 
     for r in result:
-        print(data)
         rank += 1
         if r['name'] == data[0]:
             break
