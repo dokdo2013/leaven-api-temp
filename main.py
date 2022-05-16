@@ -220,7 +220,7 @@ async def postGellToken(gell: gellToken):
 
 @app.get('/gell/ranking', status_code=200, tags=["gellgell"], summary="gellgell 랭킹")
 async def getGellRanking():
-    sql = "SELECT name, count, DATE_FORMAT(edit_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') FROM gell WHERE del_stat = 0 ORDER BY count DESC"
+    sql = "SELECT name, count, DATE_FORMAT(edit_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as edit_datetime FROM gell WHERE del_stat = 0 ORDER BY count DESC"
     res = db2.execute(sql)
     data = res.fetchall()
     result = sqlAlchemyRowToDict(data)
@@ -229,14 +229,14 @@ async def getGellRanking():
 
 @app.get('/gell/{idx}', status_code=200, tags=["gellgell"], summary="gellgell 특정 유저 검색")
 async def getGellIdx(idx: int):
-    sql = f"SELECT name, count, DATE_FORMAT(edit_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') FROM gell WHERE idx = {idx} and del_stat = 0"
+    sql = f"SELECT name, count, DATE_FORMAT(edit_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as edit_datetime FROM gell WHERE idx = {idx} and del_stat = 0"
     res = db2.execute(sql)
     data = res.fetchone()
 
     if data is None:
         return commonResponse(404, 'DATA_EMPTY', '해당되는 이름이 없습니다.')
 
-    sql2 = "SELECT name, count, DATE_FORMAT(edit_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') FROM gell WHERE del_stat = 0 ORDER BY count DESC"
+    sql2 = "SELECT name, count, DATE_FORMAT(edit_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as edit_datetime FROM gell WHERE del_stat = 0 ORDER BY count DESC"
     res2 = db2.execute(sql2)
     data2 = res2.fetchall()
     result = sqlAlchemyRowToDict(data2)
