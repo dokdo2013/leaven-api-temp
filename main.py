@@ -43,6 +43,8 @@ origins = [
     "https://multi.leaven.team",
     "https://dev-multi.leaven.team",
     "https://rust.leaven.team",
+    "https://gell.leaven.team",
+    "https://gg.leaven.team",
     "https://*.leaven.kr",
     "http://localhost:5500",
     "http://localhost:3000",
