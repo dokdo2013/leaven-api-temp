@@ -169,17 +169,20 @@ async def getBroadcast(start_date: str, end_date: str, streamer: str):
 
 @app.post('/gell', status_code=201, tags=["gellgell"], summary="gellgell 기록 등록")
 async def postGell(gell: gellData):
-    sql = f"SELECT idx, csrf_token FROM gell WHERE name = '{gell.name}'"
+    sql = f"SELECT idx, csrf_token, count FROM gell WHERE name = '{gell.name}'"
     res = db2.execute(sql)
     data = res.fetchone()
     if data is None:
         return commonResponse(404, 'DATA_EMPTY', '해당되는 이름이 없습니다.')
     idx = data[0]
     csrf_token = data[1]
+    curr_count = data[2]
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     if csrf_token != gell.csrf_token:
         return commonResponse(401, 'UNAUTHORIZED', 'CSRF 토큰이 일치하지 않습니다. 새로고침해주세요.')
+    elif curr_count < gell.count:
+        return commonResponse(400, 'OLD_DATA', '뭔가가 잘못됐어요!')
     else:
         sql1 = f"UPDATE gell SET count = {gell.count}, edit_datetime = '{now}' WHERE name = '{gell.name}'"
         sql2 = f"INSERT INTO gell_log(gell_idx, gell_count) VALUES({idx}, {gell.count})"
