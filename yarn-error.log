@@ -1,0 +1,36 @@
+Arguments: 
+  /Users/h_jo/.nvm/versions/node/v18.1.0/bin/node /opt/homebrew/Cellar/yarn/1.22.18/libexec/bin/yarn.js add @react-icons
+
+PATH: 
+  /Users/h_jo/.nvm/versions/node/v18.1.0/bin:/usr/bin/pip3:/usr/bin/python3:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/lib/node_modules/nest
+
+Yarn version: 
+  1.22.18
+
+Node version: 
+  18.1.0
+
+Platform: 
+  darwin arm64
+
+Trace: 
+  Error: https://registry.yarnpkg.com/@react-icons: Request "https://registry.yarnpkg.com/@react-icons" returned a 405
+      at params.callback [as _callback] (/opt/homebrew/Cellar/yarn/1.22.18/libexec/lib/cli.js:66147:18)
+      at self.callback (/opt/homebrew/Cellar/yarn/1.22.18/libexec/lib/cli.js:140883:22)
+      at Request.emit (node:events:527:28)
+      at Request.<anonymous> (/opt/homebrew/Cellar/yarn/1.22.18/libexec/lib/cli.js:141855:10)
+      at Request.emit (node:events:527:28)
+      at IncomingMessage.<anonymous> (/opt/homebrew/Cellar/yarn/1.22.18/libexec/lib/cli.js:141777:12)
+      at Object.onceWrapper (node:events:641:28)
+      at IncomingMessage.emit (node:events:539:35)
+      at endReadableNT (node:internal/streams/readable:1344:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:82:21)
+
+npm manifest: 
+  No manifest
+
+yarn manifest: 
+  No manifest
+
+Lockfile: 
+  No lockfile

@@ -13,12 +13,19 @@ import bcrypt
 import jwt
 import dotenv
 import os
+import sentry_sdk
+from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
 
 
 dotenv.load_dotenv()
 dbinfo = os.getenv('SQLADDR')
+dbinfo2 = os.getenv('SQLADDR2')
 db = create_engine(dbinfo)
 db.execute("SET time_zone='Asia/Seoul'")
+db2 = create_engine(dbinfo2)
+db2.execute("SET time_zone='Asia/Seoul'")
+
+sentry_sdk.init(dsn=os.getenv('DSN'))
 
 description = """
 ### 레븐 API
@@ -39,6 +46,7 @@ origins = [
     "https://*.leaven.kr",
     "http://localhost:5500",
     "http://localhost:3000",
+    "http://localhost:3001",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5500",
     "http://127.0.0.1:5501",
@@ -60,12 +68,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(SentryAsgiMiddleware)
+
 
 class CommonResponse(BaseModel):
     code: str = 'SUCCESS'
     message: str
     message_ko: str
     data: list
+
+
+class gellData(BaseModel):
+    name: str
+    count: int
+    csrf_token: str
+
+
+class gellName(BaseModel):
+    name: str
+    count: int
+    password: str
+
+
+class gellToken(BaseModel):
+    name: str
+    password: str
 
 
 def sqlAlchemyRowToDict(results):
@@ -136,6 +163,97 @@ async def getBroadcast(start_date: str, end_date: str, streamer: str):
         "data": broad_list
     }
     return result
+
+
+@app.post('/gell', status_code=201, tags=["gellgell"], summary="gellgell 기록 등록")
+async def postGell(gell: gellData):
+    sql = f"SELECT idx, csrf_token FROM gell WHERE name = '{gell.name}'"
+    res = db2.execute(sql)
+    data = res.fetchone()
+    if data is None:
+        return commonResponse(404, 'DATA_EMPTY', '해당되는 이름이 없습니다.')
+    idx = data[0]
+    csrf_token = data[1]
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    if csrf_token != gell.csrf_token:
+        return commonResponse(401, 'UNAUTHORIZED', 'CSRF 토큰이 일치하지 않습니다. 새로고침해주세요.')
+    else:
+        sql1 = f"UPDATE gell SET count = {gell.count}, edit_datetime = '{now}' WHERE name = '{gell.name}'"
+        sql2 = f"INSERT INTO gell_log(gell_idx, gell_count) VALUES({idx}, {gell.count})"
+        db2.execute(sql1)
+        db2.execute(sql2)
+        return commonResponse(201)
+
+
+@app.post('/gell/name', status_code=201, tags=["gellgell"], summary="gellgell 이름 설정")
+async def postGellName(gell: gellName):
+    sql1 = f"SELECT count(*) as cnt FROM gell WHERE name = '{gell.name}'"
+    res = db2.execute(sql1)
+    count = res.fetchone()[0]
+
+    if count > 0:
+        return commonResponse(400, 'ALREADY_EXIST', '이미 등록된 이름이 있습니다')
+    else:
+        sql2 = f"INSERT INTO gell(name, password, count) VALUES('{gell.name}', '{gell.password}', {gell.count})"
+        db2.execute(sql2)
+        return commonResponse(201)
+
+
+@app.post('/gell/token', status_code=200, tags=["gellgell"], summary="gellgell CSRF Token 발급")
+async def postGellToken(gell: gellToken):
+    sql1 = "SELECT REPLACE(UUID(), '-', '') as token"
+    res = db2.execute(sql1)
+    token = res.fetchone()[0]
+
+    sql2 = f"SELECT count(*) as cnt, idx FROM gell WHERE name = '{gell.name}' and password = '{gell.password}' and del_stat = 0"
+    res2 = db2.execute(sql2)
+    cnt = res2.fetchone()
+
+    if cnt[0] > 0:
+        sql3 = f"UPDATE gell SET csrf_token = '{token}' WHERE name = '{gell.name}'"
+        db2.execute(sql3)
+        return commonResponse(200, data={"csrf_token": token, "idx": cnt[1]})
+    else:
+        return commonResponse(401, 'UNAUTHORIZED', '아이디, 비밀번호를 확인해주세요.')
+
+
+@app.get('/gell/ranking', status_code=200, tags=["gellgell"], summary="gellgell 랭킹")
+async def getGellRanking():
+    sql = "SELECT name, count, DATE_FORMAT(edit_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') FROM gell WHERE del_stat = 0 ORDER BY count DESC"
+    res = db2.execute(sql)
+    data = res.fetchall()
+    result = sqlAlchemyRowToDict(data)
+    return commonResponse(200, data=result)
+
+
+@app.get('/gell/{idx}', status_code=200, tags=["gellgell"], summary="gellgell 특정 유저 검색")
+async def getGellIdx(idx: int):
+    sql = f"SELECT name, count, DATE_FORMAT(edit_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') FROM gell WHERE idx = {idx} and del_stat = 0"
+    res = db2.execute(sql)
+    data = res.fetchone()
+
+    if data is None:
+        return commonResponse(404, 'DATA_EMPTY', '해당되는 이름이 없습니다.')
+
+    sql2 = "SELECT name, count, DATE_FORMAT(edit_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') FROM gell WHERE del_stat = 0 ORDER BY count DESC"
+    res2 = db2.execute(sql2)
+    data2 = res2.fetchall()
+    result = sqlAlchemyRowToDict(data2)
+    rank = 0
+
+    for r in result:
+        print(data)
+        rank += 1
+        if r['name'] == data[0]:
+            break
+
+    result = {
+        "count": data[1],
+        "edit_datetime": data[2],
+        "rank": rank
+    }
+    return commonResponse(200, data=result)
 
 
 if __name__ == '__main__':
