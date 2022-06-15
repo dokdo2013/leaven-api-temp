@@ -175,7 +175,7 @@ async def getBroadcast(start_date: str, end_date: str, streamer: str):
 
 @app.get('/junharry/schedule', tags=["전해리 방송일정"], summary="전해리 방송일정 조회")
 async def getJunharrySchedule():
-    sql = "SELECT idx, DATE_FORMAT(date, '%%Y-%%m-%%d %%H:%%i:%%s') as date, name, DATE_FORMAT(reg_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as reg_datetime FROM junharry_schedule WHERE del_stat = 0"
+    sql = "SELECT idx, DATE_FORMAT(date, '%%Y-%%m-%%d %%H:%%i:%%s') as date, name, is_rest, DATE_FORMAT(reg_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as reg_datetime FROM junharry_schedule WHERE del_stat = 0"
     res = db2.execute(sql)
     data = res.fetchall()
     return commonResponse(200, data=sqlAlchemyRowToDict(data))
