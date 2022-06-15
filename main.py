@@ -212,6 +212,15 @@ async def getJunharryYoutube():
     return commonResponse(200, data=sqlAlchemyRowToDict(data))
 
 
+@app.get('/junharry/plain/{key}', tags=["전해리 방송일정"])
+async def getJunharryPlain(key: str):
+    sql = f"SELECT `value` FROM junharry_text WHERE `key` = '{key}'"
+    res = db2.execute(sql)
+    data = res.fetchone()
+    return commonResponse(200, data=data[0])
+
+
+
 @app.post('/gell', status_code=201, tags=["gellgell"], summary="gellgell 기록 등록")
 async def postGell(gell: gellData):
     sql = f"SELECT idx, csrf_token, count FROM gell WHERE name = '{gell.name}'"
