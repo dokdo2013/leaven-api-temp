@@ -203,6 +203,14 @@ async def getJunharryNotice():
     return commonResponse(200, data=sqlAlchemyRowToDict(data))
 
 
+@app.get('/junharry/youtube', tags=["전해리 방송일정"], summary="전해리 유튜브")
+async def getJunharryYoutube():
+    sql = "SELECT idx, link, cover_img, name, DATE_FORMAT(upload_date, '%%Y-%%m-%%d') as upload_date, DATE_FORMAT(reg_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as reg_datetime FROM junharry_youtube WHERE del_stat = 0"
+    res = db2.execute(sql)
+    data = res.fetchall()
+    return commonResponse(200, data=sqlAlchemyRowToDict(data))
+
+
 @app.post('/gell', status_code=201, tags=["gellgell"], summary="gellgell 기록 등록")
 async def postGell(gell: gellData):
     sql = f"SELECT idx, csrf_token, count FROM gell WHERE name = '{gell.name}'"
