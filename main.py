@@ -173,6 +173,36 @@ async def getBroadcast(start_date: str, end_date: str, streamer: str):
     return result
 
 
+@app.get('/junharry/schedule', tags=["전해리 방송일정"], summary="전해리 방송일정 조회")
+async def getJunharrySchedule():
+    sql = "SELECT idx, DATE_FORMAT(date, '%%Y-%%m-%%d %%H:%%i:%%s') as date, name, DATE_FORMAT(reg_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as reg_datetime FROM junharry_schedule WHERE del_stat = 0"
+    res = db2.execute(sql)
+    data = res.fetchall()
+    return commonResponse(200, data=sqlAlchemyRowToDict(data))
+
+
+class harrySchedule(BaseModel):
+    date: str
+    name: str
+
+@app.post('/junharry/schedule', tags=["전해리 방송일정"], summary="전해리 방송일정 등록")
+async def postJunharrySchedule(schedule: harrySchedule):
+    if schedule.date == '' or schedule.name == '':
+        return commonResponse(400, message="입력값이 잘못되었습니다.")
+    
+    sql = f"INSERT INTO junharry_schedule(date, name) VALUES('{schedule.date}', '{schedule.name}')"
+    db2.execute(sql)
+    return commonResponse(201)
+
+
+@app.get('/junharry/notice', tags=["전해리 방송일정"], summary="전해리 공지사항")
+async def getJunharryNotice():
+    sql = "SELECT idx, title, content, DATE_FORMAT(reg_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as reg_datetime FROM junharry_notice WHERE del_stat = 0 ORDER BY reg_datetime DESC"
+    res = db2.execute(sql)
+    data = res.fetchall()
+    return commonResponse(200, data=sqlAlchemyRowToDict(data))
+
+
 @app.post('/gell', status_code=201, tags=["gellgell"], summary="gellgell 기록 등록")
 async def postGell(gell: gellData):
     sql = f"SELECT idx, csrf_token, count FROM gell WHERE name = '{gell.name}'"
