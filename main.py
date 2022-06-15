@@ -45,6 +45,7 @@ origins = [
     "https://rust.leaven.team",
     "https://gell.leaven.team",
     "https://gg.leaven.team",
+    "https://junharry.vercel.app",
     "https://*.leaven.kr",
     "http://localhost:5500",
     "http://localhost:3000",
