@@ -20,6 +20,7 @@ from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
 dotenv.load_dotenv()
 dbinfo = os.getenv('SQLADDR')
 dbinfo2 = os.getenv('SQLADDR2')
+jwtSalt = os.getenv('JWT_SALT')
 db = create_engine(dbinfo)
 db.execute("SET time_zone='Asia/Seoul'")
 db2 = create_engine(dbinfo2)
@@ -121,6 +122,18 @@ def commonResponse(status_code=200, code='SUCCESS', message='성공', data={}, c
     return response
 
 
+async def common_token_validation(token):
+    try:
+        payload = jwt.decode(token, jwtSalt, algorithms='HS256')
+    except jwt.exceptions.InvalidSignatureError:
+        return [401, 'INVALID_TOKEN', '로그인 정보가 유효하지 않습니다. 다시 로그인해주세요']
+    else:
+        if int(payload['expire']) >= int(str(time.time()).split('.')[0]):  # 토큰 인증 성공
+            return [200, 'SUCCESS', '성공']
+        else:  # 토큰 만료
+            return [401, 'TOKEN_EXPIRED', '로그인 정보가 만료되었습니다. 다시 로그인해주세요']
+
+
 @app.get("/live", status_code=200, tags=["방송정보"], summary="레븐 라이브 정보")
 async def live():
     sql = "SELECT streamer_name FROM leaven WHERE broadcast_status = 'ON'"
@@ -177,7 +190,7 @@ async def getBroadcast(start_date: str, end_date: str, streamer: str):
 
 @app.get('/junharry/schedule', tags=["전해리 방송일정"], summary="전해리 방송일정 조회")
 async def getJunharrySchedule():
-    sql = "SELECT idx, DATE_FORMAT(date, '%%Y-%%m-%%d %%H:%%i:%%s') as date, name, is_rest, DATE_FORMAT(reg_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as reg_datetime FROM junharry_schedule WHERE del_stat = 0"
+    sql = "SELECT idx, DATE_FORMAT(date, '%%Y-%%m-%%d %%H:%%i:%%s') as date, name, is_rest, DATE_FORMAT(reg_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as reg_datetime FROM junharry_schedule WHERE del_stat = 0 ORDER BY date ASC"
     res = db2.execute(sql)
     data = res.fetchall()
     return commonResponse(200, data=sqlAlchemyRowToDict(data))
@@ -186,15 +199,44 @@ async def getJunharrySchedule():
 class harrySchedule(BaseModel):
     date: str
     name: str
+    is_rest: int
 
 @app.post('/junharry/schedule', tags=["전해리 방송일정"], summary="전해리 방송일정 등록")
-async def postJunharrySchedule(schedule: harrySchedule):
+async def postJunharrySchedule(schedule: harrySchedule, X_Access_Token: str = Header(None)):
+    if X_Access_Token is None or X_Access_Token == 'null':
+        return commonResponse(401, 'TOKEN_NOT_PROVIDED', '로그인 정보가 없습니다. 다시 로그인해주세요')
+    validation_result = await common_token_validation(X_Access_Token)
+    if validation_result[0] != 200:
+        return commonResponse(validation_result[0], validation_result[1], validation_result[2])
+
     if schedule.date == '' or schedule.name == '':
         return commonResponse(400, message="입력값이 잘못되었습니다.")
+    if schedule.is_rest != 0 and schedule.is_rest != 1:
+        return commonResponse(400, message="입력값이 잘못되었습니다.")
+
+    # 중복등록 제한
+    check_sql = f"SELECT count(*) as cnt FROM junharry_schedule WHERE date = '{schedule.date}' and del_stat = 0"
+    check_res = db2.execute(check_sql)
+    if check_res.fetchone()[0] != 0:
+        return commonResponse(400, message="이미 등록된 일시입니다.")
     
-    sql = f"INSERT INTO junharry_schedule(date, name) VALUES('{schedule.date}', '{schedule.name}')"
+    sql = f"INSERT INTO junharry_schedule(date, name, is_rest) VALUES('{schedule.date}', '{schedule.name}', {schedule.is_rest})"
     db2.execute(sql)
     return commonResponse(201)
+
+
+@app.delete('/junharry/schedule/{idx}', tags=["전해리 방송일정"], summary="전해리 방송일정 삭제")
+async def deleteJunharrySchedule(idx: int, X_Access_Token: str = Header(None)):
+    if X_Access_Token is None or X_Access_Token == 'null':
+        return commonResponse(401, 'TOKEN_NOT_PROVIDED', '로그인 정보가 없습니다. 다시 로그인해주세요')
+    validation_result = await common_token_validation(X_Access_Token)
+    if validation_result[0] != 200:
+        return commonResponse(validation_result[0], validation_result[1], validation_result[2])
+
+    date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    sql = f"UPDATE junharry_schedule SET del_stat = 1, del_datetime = '{date}' WHERE idx = {idx}"
+    db2.execute(sql)
+    return commonResponse(200)
 
 
 @app.get('/junharry/notice', tags=["전해리 방송일정"], summary="전해리 공지사항")
@@ -205,6 +247,16 @@ async def getJunharryNotice():
     return commonResponse(200, data=sqlAlchemyRowToDict(data))
 
 
+@app.post('/junharry/notice', tags=["전해리 방송일정"], summary="전해리 공지사항 등록")
+async def postJunharryNotice():
+    return commonResponse(200)
+
+
+@app.delete('/junharry/notice', tags=["전해리 방송일정"], summary="전해리 공지사항 삭제")
+async def deleteJunharryNotice():
+    return commonResponse(200)
+
+
 @app.get('/junharry/youtube', tags=["전해리 방송일정"], summary="전해리 유튜브")
 async def getJunharryYoutube():
     sql = "SELECT idx, link, cover_img, name, DATE_FORMAT(upload_date, '%%Y-%%m-%%d') as upload_date, DATE_FORMAT(reg_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as reg_datetime FROM junharry_youtube WHERE del_stat = 0"
@@ -213,13 +265,49 @@ async def getJunharryYoutube():
     return commonResponse(200, data=sqlAlchemyRowToDict(data))
 
 
-@app.get('/junharry/plain/{key}', tags=["전해리 방송일정"])
+@app.post('/junharry/youtube', tags=["전해리 방송일정"], summary="전해리 유튜브 등록")
+async def postJunharryYoutube():
+    return commonResponse(200)
+
+
+@app.delete('/junharry/youtube', tags=["전해리 방송일정"], summary="전해리 유튜브 삭제")
+async def deleteJunharryYoutube():
+    return commonResponse(200)
+
+
+@app.get('/junharry/plain/{key}', tags=["전해리 방송일정"], summary="전해리 기타 데이터 조회")
 async def getJunharryPlain(key: str):
     sql = f"SELECT `value` FROM junharry_text WHERE `key` = '{key}'"
     res = db2.execute(sql)
     data = res.fetchone()
     return commonResponse(200, data=data[0])
 
+
+@app.put('/junharry/plain/{key}', tags=["전해리 방송일정"], summary="전해리 기타 데이터 수정")
+async def putJunharryPlain(key: str):
+    return commonResponse(200)
+
+
+class junharryToken(BaseModel):
+    user_id: str
+    user_pw: str
+
+
+@app.post('/junharry/token', tags=["전해리 방송일정"], summary="전해리 토큰 발급")
+async def postJunharryToken(loginData: junharryToken):
+    sql = f"SELECT count(*) as cnt FROM junharry_account WHERE user_id = '{loginData.user_id}' and user_pw = '{loginData.user_pw}'"
+    res = db2.execute(sql)
+    data = res.fetchone()
+    count = data[0]
+    if count == 0:
+        return commonResponse(401, 'Unauthorized', '아이디 또는 비밀번호가 잘못 입력되었습니다')
+    else:
+        jwtData = {
+            "user_id": loginData.user_id,
+            "expire": int((str(time.time())).split('.')[0]) + 1209600
+        }
+        token = jwt.encode(jwtData, jwtSalt)
+    return commonResponse(200, data={"token": token})
 
 
 @app.post('/gell', status_code=201, tags=["gellgell"], summary="gellgell 기록 등록")
