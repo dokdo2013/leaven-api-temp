@@ -328,7 +328,7 @@ async def deleteJunharryYoutube(idx: int, X_Access_Token: str = Header(None)):
     date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     sql = f"UPDATE junharry_youtube SET del_stat = 1, del_datetime = '{date}' WHERE idx = {idx}"
     db2.execute(sql)
-    return commonResponse(200)
+    return commonResponse(200, message="유튜브 삭제에 성공했습니다.")
 
 
 @app.get('/junharry/plain/{key}', tags=["전해리 방송일정"], summary="전해리 기타 데이터 조회")
