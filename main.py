@@ -219,10 +219,11 @@ async def postJunharrySchedule(schedule: harrySchedule, X_Access_Token: str = He
     check_res = db2.execute(check_sql)
     if check_res.fetchone()[0] != 0:
         return commonResponse(400, message="이미 등록된 일시입니다.")
-    
+
+    schedule.name = schedule.name.replace("'", "\"")
     sql = f"INSERT INTO junharry_schedule(date, name, is_rest) VALUES('{schedule.date}', '{schedule.name}', {schedule.is_rest})"
     db2.execute(sql)
-    return commonResponse(201)
+    return commonResponse(201, message="방송일정 등록에 성공했습니다!")
 
 
 @app.delete('/junharry/schedule/{idx}', tags=["전해리 방송일정"], summary="전해리 방송일정 삭제")
@@ -247,31 +248,86 @@ async def getJunharryNotice():
     return commonResponse(200, data=sqlAlchemyRowToDict(data))
 
 
+class junharryNotice(BaseModel):
+    title: str
+    content: str
+
+
 @app.post('/junharry/notice', tags=["전해리 방송일정"], summary="전해리 공지사항 등록")
-async def postJunharryNotice():
-    return commonResponse(200)
+async def postJunharryNotice(data: junharryNotice, X_Access_Token: str = Header(None)):
+    if X_Access_Token is None or X_Access_Token == 'null':
+        return commonResponse(401, 'TOKEN_NOT_PROVIDED', '로그인 정보가 없습니다. 다시 로그인해주세요')
+    validation_result = await common_token_validation(X_Access_Token)
+    if validation_result[0] != 200:
+        return commonResponse(validation_result[0], validation_result[1], validation_result[2])
+
+    date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    data.title = data.title.replace("'", "\"")
+    data.content = data.content.replace("'", "\"")
+    sql = f"INSERT INTO junharry_notice(title, content, reg_datetime) VALUES('{data.title}', '{data.content}', '{date}')"
+    db2.execute(sql)
+    return commonResponse(201, message="공지사항 등록에 성공했습니다.")
 
 
-@app.delete('/junharry/notice', tags=["전해리 방송일정"], summary="전해리 공지사항 삭제")
-async def deleteJunharryNotice():
-    return commonResponse(200)
+@app.delete('/junharry/notice/{idx}', tags=["전해리 방송일정"], summary="전해리 공지사항 삭제")
+async def deleteJunharryNotice(idx: int, X_Access_Token: str = Header(None)):
+    if X_Access_Token is None or X_Access_Token == 'null':
+        return commonResponse(401, 'TOKEN_NOT_PROVIDED', '로그인 정보가 없습니다. 다시 로그인해주세요')
+    validation_result = await common_token_validation(X_Access_Token)
+    if validation_result[0] != 200:
+        return commonResponse(validation_result[0], validation_result[1], validation_result[2])
+
+    date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    sql = f"UPDATE junharry_notice SET del_stat = 1, del_datetime = '{date}' WHERE idx = {idx}"
+    db2.execute(sql)
+    return commonResponse(200, message="공지사항 삭제에 성공했습니다.")
 
 
 @app.get('/junharry/youtube', tags=["전해리 방송일정"], summary="전해리 유튜브")
-async def getJunharryYoutube():
-    sql = "SELECT idx, link, cover_img, name, DATE_FORMAT(upload_date, '%%Y-%%m-%%d') as upload_date, DATE_FORMAT(reg_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as reg_datetime FROM junharry_youtube WHERE del_stat = 0"
+async def getJunharryYoutube(all: bool = False):
+    if all is True:
+        sql = "SELECT idx, link, cover_img, name, DATE_FORMAT(upload_date, '%%Y-%%m-%%d') as upload_date, DATE_FORMAT(reg_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as reg_datetime FROM junharry_youtube WHERE del_stat = 0 ORDER BY upload_date DESC"
+    else:
+        sql = "SELECT idx, link, cover_img, name, DATE_FORMAT(upload_date, '%%Y-%%m-%%d') as upload_date, DATE_FORMAT(reg_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as reg_datetime FROM junharry_youtube WHERE del_stat = 0 ORDER BY upload_date DESC LIMIT 3"
     res = db2.execute(sql)
     data = res.fetchall()
     return commonResponse(200, data=sqlAlchemyRowToDict(data))
 
 
+class junharryYoutube(BaseModel):
+    link: str
+    cover_img: str
+    name: str
+    upload_date: str
+
+
 @app.post('/junharry/youtube', tags=["전해리 방송일정"], summary="전해리 유튜브 등록")
-async def postJunharryYoutube():
-    return commonResponse(200)
+async def postJunharryYoutube(data: junharryYoutube, X_Access_Token: str = Header(None)):
+    if X_Access_Token is None or X_Access_Token == 'null':
+        return commonResponse(401, 'TOKEN_NOT_PROVIDED', '로그인 정보가 없습니다. 다시 로그인해주세요')
+    validation_result = await common_token_validation(X_Access_Token)
+    if validation_result[0] != 200:
+        return commonResponse(validation_result[0], validation_result[1], validation_result[2])
+
+    date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    data.name = data.name.replace("'", "\"")
+
+    sql = f"INSERT INTO junharry_youtube(link, cover_img, name, upload_date, reg_datetime) VALUES('{data.link}', '{data.cover_img}', '{data.name}', '{data.upload_date}', '{date}')"
+    db2.execute(sql)
+    return commonResponse(201, message="유튜브 등록에 성공했습니다.")
 
 
-@app.delete('/junharry/youtube', tags=["전해리 방송일정"], summary="전해리 유튜브 삭제")
-async def deleteJunharryYoutube():
+@app.delete('/junharry/youtube/{idx}', tags=["전해리 방송일정"], summary="전해리 유튜브 삭제")
+async def deleteJunharryYoutube(idx: int, X_Access_Token: str = Header(None)):
+    if X_Access_Token is None or X_Access_Token == 'null':
+        return commonResponse(401, 'TOKEN_NOT_PROVIDED', '로그인 정보가 없습니다. 다시 로그인해주세요')
+    validation_result = await common_token_validation(X_Access_Token)
+    if validation_result[0] != 200:
+        return commonResponse(validation_result[0], validation_result[1], validation_result[2])
+
+    date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    sql = f"UPDATE junharry_youtube SET del_stat = 1, del_datetime = '{date}' WHERE idx = {idx}"
+    db2.execute(sql)
     return commonResponse(200)
 
 
@@ -283,9 +339,23 @@ async def getJunharryPlain(key: str):
     return commonResponse(200, data=data[0])
 
 
-@app.put('/junharry/plain/{key}', tags=["전해리 방송일정"], summary="전해리 기타 데이터 수정")
-async def putJunharryPlain(key: str):
-    return commonResponse(200)
+class junharryPlain(BaseModel):
+    key: str
+    value: str
+
+
+@app.put('/junharry/plain', tags=["전해리 방송일정"], summary="전해리 기타 데이터 수정")
+async def putJunharryPlain(data: junharryPlain, X_Access_Token: str = Header(None)):
+    if X_Access_Token is None or X_Access_Token == 'null':
+        return commonResponse(401, 'TOKEN_NOT_PROVIDED', '로그인 정보가 없습니다. 다시 로그인해주세요')
+    validation_result = await common_token_validation(X_Access_Token)
+    if validation_result[0] != 200:
+        return commonResponse(validation_result[0], validation_result[1], validation_result[2])
+
+    data.value = data.value.replace("'", "\"")
+    sql = f"UPDATE junharry_text SET `value`='{data.value}' WHERE `key` = '{data.key}'"
+    db2.execute(sql)
+    return commonResponse(200, message="수정에 성공했습니다.")
 
 
 class junharryToken(BaseModel):
