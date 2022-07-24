@@ -13,6 +13,7 @@ import bcrypt
 import jwt
 import dotenv
 import os
+import uuid
 import sentry_sdk
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
 
@@ -47,7 +48,10 @@ origins = [
     "https://gell.leaven.team",
     "https://gg.leaven.team",
     "https://junharry.vercel.app",
+    "https://junharry-test.vercel.app",
     "https://junharry-git-develop-haenu.vercel.app",
+    "https://junharry.com",
+    "https://test.junharry.com",
     "https://*.leaven.kr",
     "http://localhost:5500",
     "http://localhost:3000",
@@ -129,7 +133,7 @@ async def common_token_validation(token):
         return [401, 'INVALID_TOKEN', '로그인 정보가 유효하지 않습니다. 다시 로그인해주세요']
     else:
         if int(payload['expire']) >= int(str(time.time()).split('.')[0]):  # 토큰 인증 성공
-            return [200, 'SUCCESS', '성공']
+            return [200, 'SUCCESS', '성공', payload]
         else:  # 토큰 만료
             return [401, 'TOKEN_EXPIRED', '로그인 정보가 만료되었습니다. 다시 로그인해주세요']
 
@@ -379,6 +383,259 @@ async def postJunharryToken(loginData: junharryToken):
         token = jwt.encode(jwtData, jwtSalt)
     return commonResponse(200, data={"token": token})
 
+
+class HarryTestTwitchDto(BaseModel):
+    code: str
+
+
+@app.post('/junharry-test/auth', tags=["해리배치고사"], summary="해리배치고사 토큰 발급")
+async def postJunharryTestToken(data: HarryTestTwitchDto):
+    twitchClientId = os.getenv('TWITCH_CLIENT_ID')
+    twitchClientSecret = os.getenv('TWITCH_CLIENT_SECRET')
+    twitchRedirectUri = 'http://localhost:9091/junharry-test/auth'
+    url = f"https://id.twitch.tv/oauth2/token?client_id={twitchClientId}&client_secret={twitchClientSecret}&code={data.code}&grant_type=authorization_code&redirect_uri={twitchRedirectUri}"
+    res = requests.post(url)
+    print(res.json())
+    if res.status_code == 200:
+        # set data
+        twitch_data = res.json()
+
+        twitch_access_token = twitch_data['access_token']
+        twitch_refresh_token = twitch_data['refresh_token']
+
+        apiData = updateTwitchUserInfo(twitch_access_token)
+
+        twitch_id = apiData['id']
+        name = apiData['login']
+        display_name = apiData['display_name']
+        description = apiData['description']
+        profile_image_url = apiData['profile_image_url']
+        offline_image_url = apiData['offline_image_url']
+        email = apiData['email']
+        created_at = apiData['created_at'].replace('T', ' ').replace('Z', '')
+        type = apiData['type']
+        broadcaster_type = apiData['broadcaster_type']
+        
+
+        # Check DB and insert if not exist
+        sql = f"SELECT count(*) as cnt FROM harrytest_users WHERE id = {twitch_id}"
+        db_res = db2.execute(sql)
+        data = db_res.fetchone()
+        count = data[0]
+        if count == 0:
+            sql = f"INSERT INTO harrytest_users (id, name, display_name, description, profile_image_url, offline_image_url, created_at, twitch_access_token, email, twitch_refresh_token, type, broadcaster_type) VALUES (" + \
+                f"{twitch_id}, '{name}', '{display_name}', '{description}', '{profile_image_url}', '{offline_image_url}', '{created_at}', '{twitch_access_token}', '{twitch_refresh_token}', '{email}', '{type}', '{broadcaster_type}')"
+            db2.execute(sql)
+
+        # Create a new token
+        jwtData = {
+            "user_id": twitch_id,
+            "expire": int((str(time.time())).split('.')[0]) + 1209600
+        }
+        token = jwt.encode(jwtData, jwtSalt)
+        return commonResponse(200, data={"token": token})
+    else:
+        return commonResponse(401, 'Unauthorized', '트위치 인증에 실패했습니다.')
+
+
+@app.get('/junharry-test/home', tags=["해리배치고사"], summary="해리배치고사 Home")
+async def getJunharryTestGroup(X_Access_Token: str = Header(None)):
+    if X_Access_Token is None or X_Access_Token == 'null':
+        return commonResponse(401, 'TOKEN_NOT_PROVIDED', '로그인 정보가 없습니다. 다시 로그인해주세요')
+    validation_result = await common_token_validation(X_Access_Token)
+    if validation_result[0] != 200:
+        return commonResponse(validation_result[0], validation_result[1], validation_result[2])
+
+    user_idx = validation_result[3]['user_id']
+
+    # Get User Info
+    sql = f"SELECT id, name, display_name, profile_image_url FROM harrytest_users WHERE id = {user_idx}"
+    res = db2.execute(sql)
+    data = res.fetchone()
+
+    # Check is done
+    sql = f"SELECT is_done FROM harrytest_userjoin WHERE user_idx = {user_idx}"
+    res = db2.execute(sql)
+    data2 = res.fetchone()
+
+    if data2 is None:
+        is_done = 0
+    elif data2[0] == 0:
+        is_done = 0
+    else:
+        is_done = 1
+
+
+    # User Info
+    responseData = {
+        "user": {
+            "name": data[1],
+            "display_name": data[2],
+            "logo": data[3]
+        },
+        "is_done": is_done
+    }
+
+    return commonResponse(200, data=responseData)
+
+
+@app.post('/junharry-test/start/{group_idx}', tags=["해리배치고사"], summary="해리배치고사 시작")
+async def postJunharryTestStart(group_idx: int, X_Access_Token: str = Header(None)):
+    if X_Access_Token is None or X_Access_Token == 'null':
+        return commonResponse(401, 'TOKEN_NOT_PROVIDED', '로그인 정보가 없습니다. 다시 로그인해주세요')
+    validation_result = await common_token_validation(X_Access_Token)
+    if validation_result[0] != 200:
+        return commonResponse(validation_result[0], validation_result[1], validation_result[2])
+
+    user_idx = validation_result[3]['user_id']
+
+    # 참여 기록이 있는지 확인
+    sql = f"SELECT count(*) as cnt FROM harrytest_userjoin WHERE user_idx = {user_idx} and group_idx = {group_idx}"
+    res = db2.execute(sql)
+    data = res.fetchone()
+    count = data[0]
+    if count == 0:
+        sql = f"INSERT INTO harrytest_userjoin (user_idx, group_idx) VALUES ({user_idx}, {group_idx})"
+        db2.execute(sql)
+
+    # CSRF 토큰 부여하고 성공 반환 (그럼 프론트에서 1번 문제 호출하러 가면서 토큰 같이 보내서 처리)
+    csrf_token = str(uuid.uuid4()).replace('-', '')
+    sql = f"UPDATE harrytest_users SET csrf_token = '{csrf_token}' WHERE id = {user_idx}"
+    db2.execute(sql)
+
+    returnData = {
+        "csrf_token": csrf_token
+    }
+
+    if len(data) == 0:
+        return commonResponse(400, 'NO_DATA', '데이터가 없습니다.')
+    else:
+        return commonResponse(200, data=returnData)
+
+
+@app.post('/junharry-test/end', tags=["해리배치고사"], summary="해리배치고사 종료")
+async def postJunharryTestEnd(X_Access_Token: str = Header(None), X_CSRF_Token: str = Header(None)):
+    if X_Access_Token is None or X_Access_Token == 'null':
+        return commonResponse(401, 'TOKEN_NOT_PROVIDED', '로그인 정보가 없습니다. 다시 로그인해주세요')
+
+    if X_CSRF_Token is None or X_CSRF_Token == 'null':
+        return commonResponse(401, 'CSRF_TOKEN_NOT_PROVIDED', 'CSRF 토큰이 없습니다. 다시 시도해주세요')
+
+    validation_result = await common_token_validation(X_Access_Token)
+    if validation_result[0] != 200:
+        return commonResponse(validation_result[0], validation_result[1], validation_result[2])
+    user_idx = validation_result[3]['user_id']
+
+    get_csrf_query = f"SELECT csrf_token FROM harrytest_users WHERE id = {user_idx}"
+    res = db2.execute(get_csrf_query)
+    data = res.fetchone()
+    if data[0] != X_CSRF_Token:
+        return commonResponse(401, 'CSRF_TOKEN_NOT_MATCH', 'CSRF 토큰이 일치하지 않습니다. 다시 시도해주세요')
+
+    # 종료 처리
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    sql = f"UPDATE harrytest_userjoin SET is_done = 1, edit_datetime = '{now}' WHERE user_idx = {user_idx}"
+    db2.execute(sql)
+
+    return commonResponse(200)
+
+
+@app.get('/junharry-test/question/{group}/{question}', tags=["해리배치고사"], summary="해리배치고사 문제 조회")
+async def getJunharryTestQuestion(X_Access_Token: str = Header(None), X_CSRF_Token: str = Header(None), group: int = '', question: int = ''):
+    if X_Access_Token is None or X_Access_Token == 'null':
+        return commonResponse(401, 'TOKEN_NOT_PROVIDED', '로그인 정보가 없습니다. 다시 로그인해주세요')
+    if X_CSRF_Token is None or X_CSRF_Token == 'null':
+        return commonResponse(401, 'CSRF_TOKEN_NOT_PROVIDED', 'CSRF 토큰이 없습니다. 다시 시도해주세요')
+
+    validation_result = await common_token_validation(X_Access_Token)
+    if validation_result[0] != 200:
+        return commonResponse(validation_result[0], validation_result[1], validation_result[2])
+    user_idx = validation_result[3]['user_id']
+
+    get_csrf_query = f"SELECT csrf_token FROM harrytest_users WHERE id = {user_idx}"
+    res = db2.execute(get_csrf_query)
+    data = res.fetchone()
+    if data[0] != X_CSRF_Token:
+        return commonResponse(401, 'CSRF_TOKEN_NOT_MATCH', 'CSRF 토큰이 일치하지 않습니다. 다시 시도해주세요')
+
+    # 문제 조회
+    sql = f"SELECT subject FROM harrytest_question WHERE idx = {question}"
+    res = db2.execute(sql)
+    data = res.fetchone()
+    if len(data) == 0:
+        return commonResponse(400, 'NO_DATA', '데이터가 없습니다.')
+
+    # 답변 조회
+    sql2 = f"SELECT idx, content FROM harrytest_answer WHERE question_idx = {question}"
+    res = db2.execute(sql2)
+    data2 = res.fetchall()
+    if len(data2) == 0:
+        return commonResponse(400, 'NO_DATA', '데이터가 없습니다.')
+
+    # 미리 등록된 답변 있는지 조회
+    sql3 = f"SELECT user_answer_idx FROM harrytest_userdata WHERE user_idx = {user_idx} and question_idx = {question} order by idx desc"
+    res = db2.execute(sql3)
+    data3 = res.fetchone()
+    if data3 is None:
+        user_answer = -1
+    else:
+        user_answer = data3[0]
+
+    # CSRF 토큰 부여하고 업데이트
+    csrf_token = str(uuid.uuid4()).replace('-', '')
+    sql = f"UPDATE harrytest_users SET csrf_token = '{csrf_token}' WHERE id = {user_idx}"
+    db2.execute(sql)
+
+    returnData = {
+        "question": data[0],
+        "answers": sqlAlchemyRowToDict(data2),
+        "answer": user_answer,
+        "csrfToken": csrf_token
+    }
+
+    return commonResponse(200, data=returnData)
+
+
+@app.post('/junharry-test/submit/{group}/{question}/{answer}', tags=["해리배치고사"], summary="해리배치고사 문제 정답 등록")
+async def postJunharryTestSubmit(X_Access_Token: str = Header(None), X_CSRF_Token: str = Header(None), group: int = -1, question: int = -1, answer: int = -1):
+    if group == -1 or question == -1 or answer == -1:
+        return commonResponse(400, 'UNEXPECTED_VALUE_GIVEN', '데이터가 잘못 전달되었습니다.')
+    if X_Access_Token is None or X_Access_Token == 'null':
+        return commonResponse(401, 'TOKEN_NOT_PROVIDED', '로그인 정보가 없습니다. 다시 로그인해주세요')
+
+    validation_result = await common_token_validation(X_Access_Token)
+    if validation_result[0] != 200:
+        return commonResponse(validation_result[0], validation_result[1], validation_result[2])
+    user_idx = validation_result[3]['user_id']
+
+    get_csrf_query = f"SELECT csrf_token FROM harrytest_users WHERE id = {user_idx}"
+    res = db2.execute(get_csrf_query)
+    data = res.fetchone()
+    if data[0] != X_CSRF_Token:
+        return commonResponse(401, 'CSRF_TOKEN_NOT_MATCH', 'CSRF 토큰이 일치하지 않습니다. 다시 시도해주세요')
+
+    # 답변 입력
+    try:
+        sql = f"INSERT INTO harrytest_userdata (user_idx, question_idx, user_answer_idx) VALUES ({user_idx}, {question}, {answer})"
+        db2.execute(sql)
+    except Exception as e:
+        return commonResponse(400, 'DB_ERROR', '데이터베이스 오류가 발생했습니다.')
+
+    return commonResponse(200)
+
+def updateTwitchUserInfo(access_token):
+    url = 'https://api.twitch.tv/helix/users'
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Client-ID': os.getenv('TWITCH_CLIENT_ID')
+    }
+    res = requests.get(url, headers=headers)
+    if res.status_code != 200:
+        return None
+    else:
+        data = res.json()['data']
+        return data[0]
+    
 
 @app.post('/gell', status_code=201, tags=["gellgell"], summary="gellgell 기록 등록")
 async def postGell(gell: gellData):
