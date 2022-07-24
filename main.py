@@ -49,6 +49,8 @@ origins = [
     "https://gg.leaven.team",
     "https://junharry.vercel.app",
     "https://junharry-test.vercel.app",
+    "https://junharry.com",
+    "https://www.junharry.com",
     "https://junharry-git-develop-haenu.vercel.app",
     "https://junharry.com",
     "https://test.junharry.com",

@@ -9,3 +9,7 @@ https://api-v1.leaven.team
 
 ## Deployment
 Git push to main -> Jenkins Deployment -> Slack Notification
+
+
+## Error Monitoring
+by Sentry
