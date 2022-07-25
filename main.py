@@ -394,7 +394,7 @@ class HarryTestTwitchDto(BaseModel):
 async def postJunharryTestToken(data: HarryTestTwitchDto):
     twitchClientId = os.getenv('TWITCH_CLIENT_ID')
     twitchClientSecret = os.getenv('TWITCH_CLIENT_SECRET')
-    twitchRedirectUri = 'http://localhost:9091/junharry-test/auth'
+    twitchRedirectUri = 'https://api-v1.leaven.team/junharry-test/auth'
     url = f"https://id.twitch.tv/oauth2/token?client_id={twitchClientId}&client_secret={twitchClientSecret}&code={data.code}&grant_type=authorization_code&redirect_uri={twitchRedirectUri}"
     res = requests.post(url)
     print(res.json())
