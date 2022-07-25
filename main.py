@@ -697,7 +697,7 @@ async def getJunharryTestResult(X_Access_Token: str = Header(None), group: int =
             score += 1
 
     returnData = {
-        "userdata": {
+        "user_data": {
             "name": data[0],
             "display_name": data[1],
             "profile_image_url": data[2]
