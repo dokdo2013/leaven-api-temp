@@ -625,6 +625,90 @@ async def postJunharryTestSubmit(X_Access_Token: str = Header(None), X_CSRF_Toke
 
     return commonResponse(200)
 
+
+@app.get('/junharry-test/result/{group}', tags=["해리배치고사"], summary="해리배치고사 결과 조회")
+async def getJunharryTestResult(X_Access_Token: str = Header(None), group: int = -1):
+    if group == -1:
+        return commonResponse(400, 'UNEXPECTED_VALUE_GIVEN', '데이터가 잘못 전달되었습니다.')
+    if X_Access_Token is None or X_Access_Token == 'null':
+        return commonResponse(401, 'TOKEN_NOT_PROVIDED', '로그인 정보가 없습니다. 다시 로그인해주세요')
+    
+    validation_result = await common_token_validation(X_Access_Token)
+    if validation_result[0] != 200:
+        return commonResponse(validation_result[0], validation_result[1], validation_result[2])
+    user_idx = validation_result[3]['user_id']
+
+    # is_done 이 0이면 오류 반환
+    sql = f"SELECT is_done FROM harrytest_userjoin WHERE user_idx = {user_idx}"
+    res = db2.execute(sql)
+    data0 = res.fetchone()
+    if data0 is None:
+        return commonResponse(400, 'NOT_DONE', '아직 해리배치고사에 응시하지 않았습니다.')
+    if data0[0] == 0:
+        return commonResponse(400, 'NOT_DONE', '아직 해리배치고사를 완료하지 않았습니다.')
+
+    # 유저 데이터 조회
+    sql = f"SELECT name, display_name, profile_image_url FROM harrytest_users WHERE id = {user_idx}"
+    res = db2.execute(sql)
+    data = res.fetchone()
+    if data is None:
+        return commonResponse(400, 'NO_DATA', '데이터가 없습니다.')
+
+    # 전체 데이터 조회
+    data_list = []
+    score = 0
+    for i in range(15):
+        # 정답 조회
+        answer_list = []
+        sql = f"SELECT idx, content FROM harrytest_answer WHERE question_idx = {i+1}"
+        res = db2.execute(sql)
+        data2 = res.fetchall()
+        if data2 is None:
+            return commonResponse(400, 'NO_DATA', '데이터가 없습니다.')
+        else:
+            answer_list.append(sqlAlchemyRowToDict(data2))
+
+        # 문제 조회
+        sql = f"SELECT subject, answer_idx FROM harrytest_question WHERE idx = {i+1}"
+        res = db2.execute(sql)
+        data3 = res.fetchone()
+        if data3 is None:
+            return commonResponse(400, 'NO_DATA', '데이터가 없습니다.')
+
+        # 유저 정답 조회
+        sql = f"SELECT user_answer_idx FROM harrytest_userdata WHERE user_idx = {user_idx} AND question_idx = {i+1} ORDER BY idx DESC LIMIT 1"
+        res = db2.execute(sql)
+        data4 = res.fetchone()
+        if data4 is None:
+            return commonResponse(400, 'NO_DATA', '데이터가 없습니다.')
+        
+        # 전체 데이터 결합
+        total_data = {
+            "question_idx": i+1,
+            "question": data3[0],
+            "correct_answer": data3[1],
+            "user_answer": data4[0],
+            "answers": answer_list
+        }
+        data_list.append(total_data)
+
+        # 점수 계산
+        if data3[1] == data4[0]:
+            score += 1
+
+    returnData = {
+        "userdata": {
+            "name": data[0],
+            "display_name": data[1],
+            "profile_image_url": data[2]
+        },
+        "score": score,
+        "test_data": data_list
+    }
+
+    return commonResponse(200, data=returnData)
+
+
 def updateTwitchUserInfo(access_token):
     url = 'https://api.twitch.tv/helix/users'
     headers = {
