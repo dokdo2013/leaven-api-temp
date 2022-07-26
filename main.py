@@ -489,16 +489,15 @@ async def postJunharryTestToken(data: HarryTestTwitchDto):
         apiData = updateTwitchUserInfo(twitch_access_token)
 
         twitch_id = apiData['id']
-        name = apiData['login']
-        display_name = apiData['display_name']
-        description = apiData['description']
-        profile_image_url = apiData['profile_image_url']
-        offline_image_url = apiData['offline_image_url']
-        email = apiData['email']
+        name = apiData['login'].replace('\'', '\'\'')
+        display_name = apiData['display_name'].replace('\'', '\'\'')
+        description = apiData['description'].replace('\'', '\'\'')
+        profile_image_url = apiData['profile_image_url'].replace('\'', '\'\'')
+        offline_image_url = apiData['offline_image_url'].replace('\'', '\'\'')
+        email = apiData['email'].replace('\'', '\'\'')
         created_at = apiData['created_at'].replace('T', ' ').replace('Z', '')
-        type = apiData['type']
-        broadcaster_type = apiData['broadcaster_type']
-        
+        type = apiData['type'].replace('\'', '\'\'')
+        broadcaster_type = apiData['broadcaster_type'].replace('\'', '\'\'')        
 
         # Check DB and insert if not exist
         sql = f"SELECT count(*) as cnt FROM harrytest_users WHERE id = {twitch_id}"
