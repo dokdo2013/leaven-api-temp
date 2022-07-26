@@ -32,8 +32,8 @@ db2.execute("SET time_zone='Asia/Seoul'")
 sentry_sdk.init(dsn=os.getenv('DSN'))
 
 if env == 'PROD':
-    REDIS_HOST = str = os.getenv("REDIS_HOST")
-    REDIS_PORT = integer = os.getenv("REDIS_PORT")
+    REDIS_HOST = os.getenv("REDIS_HOST")
+    REDIS_PORT = os.getenv("REDIS_PORT")
 else:
     REDIS_HOST = os.getenv("REDIS_LOCAL_HOST")
     REDIS_PORT = os.getenv("REDIS_LOCAL_PORT")
@@ -408,8 +408,7 @@ async def getJunharryTest(X_Access_Token: str = Header(None)):
     totalRedisKey = f"junharry_test_total"
     totalRedisData = rd.get(totalRedisKey)
     if totalRedisData is not None:
-        totalRedisData = json.loads(totalRedisData)
-        return commonResponse(200, data=totalRedisData)
+        return commonResponse(200, data=json.loads(totalRedisData))
 
     # 먼저 전체 응시자 조회
     sql = f"SELECT user_idx, DATE_FORMAT(reg_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as reg_datetime, DATE_FORMAT(edit_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as edit_datetime FROM harrytest_userjoin WHERE is_done = 1 and del_stat = 0"
