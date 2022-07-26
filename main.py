@@ -379,6 +379,113 @@ class junharryToken(BaseModel):
     user_pw: str
 
 
+@app.get('/junharry/follow/{watcher_id}', tags=["전해리 방송일정"], summary="전해리 트위치 팔로우 정보 조회")
+async def getJunharryFollow(watcher_id: int, X_Access_Token: str = Header(None)):
+    if X_Access_Token is None or X_Access_Token == 'null':
+        return commonResponse(401, 'TOKEN_NOT_PROVIDED', '로그인 정보가 없습니다. 다시 로그인해주세요')
+    validation_result = await common_token_validation(X_Access_Token)
+    if validation_result[0] != 200:
+        return commonResponse(validation_result[0], validation_result[1], validation_result[2])
+
+    # access token
+    sql = f"SELECT twitch_access_token, email as twitch_refresh_token FROM harrytest_users WHERE id = {watcher_id}"
+    res = db2.execute(sql)
+    data = res.fetchone()
+    if data is None:
+        return commonResponse(404, 'USER_NOT_FOUND', '존재하지 않는 유저입니다.')
+    else:
+        access_token = data[0]
+        refresh_token = data[1]
+
+    # 트위치 API 팔로우 정보 조회
+    url = f'https://api.twitch.tv/helix/users/follows?from_id={watcher_id}&to_id=178323155&first=1'
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Client-ID': os.getenv('TWITCH_CLIENT_ID')
+    }
+    res = requests.get(url, headers=headers)
+    print(res.status_code)
+    if res.status_code != 200:
+        # revalidate
+        validate_url = f'https://id.twitch.tv/oauth2/token?client_id={os.getenv("TWITCH_CLIENT_ID")}&client_secret={os.getenv("TWITCH_CLIENT_SECRET")}&grant_type=refresh_token&refresh_token={refresh_token}'
+        res = requests.post(validate_url)
+        if res.status_code != 200:
+            return commonResponse(res.status_code, 'REVALIDATE_FAILED', '재시도 하지 못했습니다.')
+        else:
+            access_token = res.json()['access_token']
+            sql = f"UPDATE harrytest_users SET twitch_access_token = '{access_token}' WHERE id = {watcher_id}"
+            db2.execute(sql)
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Client-ID': os.getenv('TWITCH_CLIENT_ID')
+            }
+            res = requests.get(url, headers=headers)
+            if res.status_code != 200:
+                return commonResponse(res.status_code, 'REVALIDATE_FAILED', '재시도 하지 못했습니다.')
+            else:
+                print(res)
+                res = res.json()
+                return commonResponse(200, data=res)
+    else:
+        print(data)
+        data = res.json()
+        return commonResponse(200, data=data)
+
+
+@app.get('/junharry/subscribe/{watcher_id}', tags=["전해리 방송일정"], summary="전해리 트위치 구독 정보 조회")
+async def getJunharryFollow(watcher_id: int, X_Access_Token: str = Header(None)):
+    if X_Access_Token is None or X_Access_Token == 'null':
+        return commonResponse(401, 'TOKEN_NOT_PROVIDED', '로그인 정보가 없습니다. 다시 로그인해주세요')
+    validation_result = await common_token_validation(X_Access_Token)
+    if validation_result[0] != 200:
+        return commonResponse(validation_result[0], validation_result[1], validation_result[2])
+
+    # access token
+    sql = f"SELECT twitch_access_token, email as twitch_refresh_token FROM harrytest_users WHERE id = {watcher_id}"
+    res = db2.execute(sql)
+    data = res.fetchone()
+    if data is None:
+        return commonResponse(404, 'USER_NOT_FOUND', '존재하지 않는 유저입니다.')
+    else:
+        access_token = data[0]
+        refresh_token = data[1]
+
+    # 트위치 API 팔로우 정보 조회
+    url = f'https://api.twitch.tv/helix/subscriptions/user?user_id={watcher_id}&broadcaster_id=178323155'
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Client-ID': os.getenv('TWITCH_CLIENT_ID')
+    }
+    res = requests.get(url, headers=headers)
+    print(res.status_code)
+    if res.status_code != 200:
+        # revalidate
+        validate_url = f'https://id.twitch.tv/oauth2/token?client_id={os.getenv("TWITCH_CLIENT_ID")}&client_secret={os.getenv("TWITCH_CLIENT_SECRET")}&grant_type=refresh_token&refresh_token={refresh_token}'
+        res = requests.post(validate_url)
+        if res.status_code != 200:
+            return commonResponse(res.status_code, 'REVALIDATE_FAILED', '재시도 하지 못했습니다.')
+        else:
+            access_token = res.json()['access_token']
+            sql = f"UPDATE harrytest_users SET twitch_access_token = '{access_token}' WHERE id = {watcher_id}"
+            db2.execute(sql)
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Client-ID': os.getenv('TWITCH_CLIENT_ID')
+            }
+            res = requests.get(url, headers=headers)
+            if res.status_code != 200:
+                return commonResponse(res.status_code, 'REVALIDATE_FAILED', '재시도 하지 못했습니다.')
+            else:
+                print(res)
+                res = res.json()
+                return commonResponse(200, data=res)
+    else:
+        print(data)
+        data = res.json()
+        return commonResponse(200, data=data)
+
+
+
 @app.post('/junharry/token', tags=["전해리 방송일정"], summary="전해리 토큰 발급")
 async def postJunharryToken(loginData: junharryToken):
     sql = f"SELECT count(*) as cnt FROM junharry_account WHERE user_id = '{loginData.user_id}' and user_pw = '{loginData.user_pw}'"
