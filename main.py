@@ -492,10 +492,7 @@ async def postJunharryTestToken(data: HarryTestTwitchDto):
         description = apiData['description']
         profile_image_url = apiData['profile_image_url']
         offline_image_url = apiData['offline_image_url']
-        try:
-            email = apiData['email']
-        except:
-            email = ' '
+        email = apiData['email']
         created_at = apiData['created_at'].replace('T', ' ').replace('Z', '')
         type = apiData['type']
         broadcaster_type = apiData['broadcaster_type']
