@@ -13,12 +13,14 @@ import bcrypt
 import jwt
 import dotenv
 import os
+import redis
 import uuid
 import sentry_sdk
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
 
 
 dotenv.load_dotenv()
+env = os.getenv('ENV')
 dbinfo = os.getenv('SQLADDR')
 dbinfo2 = os.getenv('SQLADDR2')
 jwtSalt = os.getenv('JWT_SALT')
@@ -28,6 +30,14 @@ db2 = create_engine(dbinfo2)
 db2.execute("SET time_zone='Asia/Seoul'")
 
 sentry_sdk.init(dsn=os.getenv('DSN'))
+
+if env == 'PROD':
+    REDIS_HOST = str = os.getenv("REDIS_HOST")
+    REDIS_PORT = integer = os.getenv("REDIS_PORT")
+else:
+    REDIS_HOST = os.getenv("REDIS_LOCAL_HOST")
+    REDIS_PORT = os.getenv("REDIS_LOCAL_PORT")
+rd = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0)
 
 description = """
 ### 레븐 API
@@ -386,6 +396,75 @@ async def postJunharryToken(loginData: junharryToken):
     return commonResponse(200, data={"token": token})
 
 
+@app.get('/junharry/test', tags=["전해리 방송일정"], summary="해리배치고사 결과들")
+async def getJunharryTest(X_Access_Token: str = Header(None)):
+    if X_Access_Token is None or X_Access_Token == 'null':
+        return commonResponse(401, 'TOKEN_NOT_PROVIDED', '로그인 정보가 없습니다. 다시 로그인해주세요')
+    validation_result = await common_token_validation(X_Access_Token)
+    if validation_result[0] != 200:
+        return commonResponse(validation_result[0], validation_result[1], validation_result[2])
+
+    # 캐시 조회
+    totalRedisKey = f"junharry_test_total"
+    totalRedisData = rd.get(totalRedisKey)
+    if totalRedisData is not None:
+        totalRedisData = json.loads(totalRedisData)
+        return commonResponse(200, data=totalRedisData)
+
+    # 먼저 전체 응시자 조회
+    sql = f"SELECT user_idx, DATE_FORMAT(reg_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as reg_datetime, DATE_FORMAT(edit_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as edit_datetime FROM harrytest_userjoin WHERE is_done = 1 and del_stat = 0"
+    res = db2.execute(sql)
+    data = res.fetchall()
+    
+    # getInternalJunharryTestResult 호출
+    total = []
+    for row in data:
+        # row[0] 없을 때 예외처리
+        if row is None:
+            continue
+        redisKey = f"harrytest_score:{row[0]}"
+        redisData = rd.get(redisKey)
+        if redisData is not None:
+            redisData = json.loads(redisData)
+            total.append(redisData)
+        # 응시 결과 조회
+        score = await getInternalJunharryScore(row[0])
+        # user data 조회
+        sql = f"SELECT id, name, display_name, description, profile_image_url, twitch_refresh_token as email, DATE_FORMAT(created_at, '%%Y-%%m-%%d %%H:%%i:%%s') as created_at FROM harrytest_users WHERE id = {row[0]}"
+        res = db2.execute(sql)
+        userData = res.fetchone()
+        if userData is None:
+            continue
+        # 최종 데이터 조합
+        user_id = userData[0]
+        user_name = userData[1]
+        user_display_name = userData[2]
+        user_description = userData[3]
+        user_profile_image_url = userData[4]
+        user_email = userData[5]
+        user_created_at = userData[6]
+        reUserData = {
+            "user_id": user_id,
+            "user_name": user_name,
+            "user_display_name": user_display_name,
+            "user_description": user_description,
+            "user_profile_image_url": user_profile_image_url,
+            "user_email": user_email,
+            "user_created_at": user_created_at,
+        }
+        inputData = {
+            "user": reUserData,
+            "score": score
+        }
+        rd.set(redisKey, json.dumps(inputData))
+        total.append(inputData)
+
+    # set cache
+    rd.set(totalRedisKey, json.dumps(total), 180)
+
+    return commonResponse(200, data=total)
+
+
 class HarryTestTwitchDto(BaseModel):
     code: str
 
@@ -641,6 +720,13 @@ async def getJunharryTestResult(X_Access_Token: str = Header(None), group: int =
         return commonResponse(validation_result[0], validation_result[1], validation_result[2])
     user_idx = validation_result[3]['user_id']
 
+    redisKey = f"harrytest_result:{user_idx}"
+    redisData = rd.get(redisKey)
+    if redisData is not None:
+        redisData = json.loads(redisData)
+        return commonResponse(200, data=redisData)
+
+
     # is_done 이 0이면 오류 반환
     sql = f"SELECT is_done FROM harrytest_userjoin WHERE user_idx = {user_idx}"
     res = db2.execute(sql)
@@ -709,7 +795,44 @@ async def getJunharryTestResult(X_Access_Token: str = Header(None), group: int =
         "test_data": data_list
     }
 
+    # redis 저장
+    rd.set(redisKey, json.dumps(returnData))
+
     return commonResponse(200, data=returnData)
+
+
+async def getInternalJunharryScore(user_idx: int = -1):
+    # is_done 이 0이면 오류 반환
+    sql = f"SELECT is_done FROM harrytest_userjoin WHERE user_idx = {user_idx}"
+    res = db2.execute(sql)
+    data0 = res.fetchone()
+    if data0 is None:
+        return commonResponse(400, 'NOT_DONE', '아직 해리배치고사에 응시하지 않았습니다.')
+    if data0[0] == 0:
+        return commonResponse(400, 'NOT_DONE', '아직 해리배치고사를 완료하지 않았습니다.')
+
+    # 전체 데이터 조회
+    score = 0
+    for i in range(15):
+        # 문제 조회
+        sql = f"SELECT subject, answer_idx FROM harrytest_question WHERE idx = {i+1}"
+        res = db2.execute(sql)
+        data3 = res.fetchone()
+        if data3 is None:
+            return commonResponse(400, 'NO_DATA', '데이터가 없습니다.')
+
+        # 유저 정답 조회
+        sql = f"SELECT user_answer_idx FROM harrytest_userdata WHERE user_idx = {user_idx} AND question_idx = {i+1} ORDER BY idx DESC LIMIT 1"
+        res = db2.execute(sql)
+        data4 = res.fetchone()
+        if data4 is None:
+            return commonResponse(400, 'NO_DATA', '데이터가 없습니다.')
+
+        # 점수 계산
+        if data3[1] == data4[0]:
+            score += 1
+
+    return score
 
 
 def updateTwitchUserInfo(access_token):
