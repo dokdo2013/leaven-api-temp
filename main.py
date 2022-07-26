@@ -407,7 +407,9 @@ async def getJunharryTest(X_Access_Token: str = Header(None)):
     # 캐시 조회
     totalRedisKey = f"junharry_test_total"
     totalRedisData = rd.get(totalRedisKey)
+    print(totalRedisData)
     if totalRedisData is not None:
+        print(json.loads(totalRedisData))
         return commonResponse(200, data=json.loads(totalRedisData))
 
     # 먼저 전체 응시자 조회
@@ -426,6 +428,7 @@ async def getJunharryTest(X_Access_Token: str = Header(None)):
         if redisData is not None:
             redisData = json.loads(redisData)
             total.append(redisData)
+            continue
         # 응시 결과 조회
         score = await getInternalJunharryScore(row[0])
         # user data 조회
