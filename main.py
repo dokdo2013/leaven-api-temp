@@ -1184,7 +1184,3 @@ async def getGellIdx(idx: int):
     }
     return commonResponse(200, data=result)
 
-
-if __name__ == '__main__':
-    uvicorn.run("main:app", host="0.0.0.0", port=9091, reload=True)
-    # getInfo()
