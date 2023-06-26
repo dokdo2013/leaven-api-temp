@@ -150,6 +150,13 @@ async def common_token_validation(token):
             return [401, 'TOKEN_EXPIRED', '로그인 정보가 만료되었습니다. 다시 로그인해주세요']
 
 
+@app.get("/health", status_code=200)
+def health():
+    return {
+        "status": "ok"
+    }
+
+
 @app.get("/live", status_code=200, tags=["방송정보"], summary="레븐 라이브 정보")
 async def live():
     sql = "SELECT streamer_name FROM leaven WHERE broadcast_status = 'ON'"
