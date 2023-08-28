@@ -34,10 +34,13 @@ sentry_sdk.init(dsn=os.getenv('DSN'))
 if env == 'PROD':
     REDIS_HOST = os.getenv("REDIS_HOST")
     REDIS_PORT = os.getenv("REDIS_PORT")
+    REDIS_PASS = os.getenv("REDIS_PASS")
 else:
     REDIS_HOST = os.getenv("REDIS_LOCAL_HOST")
     REDIS_PORT = os.getenv("REDIS_LOCAL_PORT")
-rd = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0)
+    REDIS_PASS = os.getenv("REDIS_LOCAL_PASS")
+# rd = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0)
+rd = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, password=REDIS_PASS, db=0)
 
 description = """
 ### 레븐 API
@@ -134,7 +137,8 @@ def commonResponse(status_code=200, code='SUCCESS', message='성공', data={}, c
     }
     response = JSONResponse(res, status_code=status_code, headers=headers)
     for cookie in cookies:
-        response.set_cookie(cookie['key'], cookie['value'], secure=cookie['secure'], httponly=cookie['httponly'])
+        response.set_cookie(cookie['key'], cookie['value'],
+                            secure=cookie['secure'], httponly=cookie['httponly'])
     return response
 
 
@@ -223,6 +227,7 @@ class harrySchedule(BaseModel):
     date: str
     name: str
     is_rest: int
+
 
 @app.post('/junharry/schedule', tags=["전해리 방송일정"], summary="전해리 방송일정 등록")
 async def postJunharrySchedule(schedule: harrySchedule, X_Access_Token: str = Header(None)):
@@ -492,7 +497,6 @@ async def getJunharryFollow(watcher_id: int, X_Access_Token: str = Header(None))
         return commonResponse(200, data=data)
 
 
-
 @app.post('/junharry/token', tags=["전해리 방송일정"], summary="전해리 토큰 발급")
 async def postJunharryToken(loginData: junharryToken):
     sql = f"SELECT count(*) as cnt FROM junharry_account WHERE user_id = '{loginData.user_id}' and user_pw = '{loginData.user_pw}'"
@@ -530,7 +534,7 @@ async def getJunharryTest(X_Access_Token: str = Header(None)):
     sql = f"SELECT user_idx, DATE_FORMAT(reg_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as reg_datetime, DATE_FORMAT(edit_datetime, '%%Y-%%m-%%d %%H:%%i:%%s') as edit_datetime FROM harrytest_userjoin WHERE is_done = 1 and del_stat = 0"
     res = db2.execute(sql)
     data = res.fetchall()
-    
+
     # getInternalJunharryTestResult 호출
     total = []
     for row in data:
@@ -611,7 +615,7 @@ async def postJunharryTestToken(data: HarryTestTwitchDto):
         email = apiData['email'].replace('\'', '\'\'')
         created_at = apiData['created_at'].replace('T', ' ').replace('Z', '')
         type = apiData['type'].replace('\'', '\'\'')
-        broadcaster_type = apiData['broadcaster_type'].replace('\'', '\'\'')        
+        broadcaster_type = apiData['broadcaster_type'].replace('\'', '\'\'')
 
         # Check DB and insert if not exist
         sql = f"SELECT count(*) as cnt FROM harrytest_users WHERE id = {twitch_id}"
@@ -660,7 +664,6 @@ async def getJunharryTestGroup(X_Access_Token: str = Header(None)):
         is_done = 0
     else:
         is_done = 1
-
 
     # User Info
     responseData = {
@@ -826,7 +829,7 @@ async def getJunharryTestResult(X_Access_Token: str = Header(None), group: int =
         return commonResponse(400, 'UNEXPECTED_VALUE_GIVEN', '데이터가 잘못 전달되었습니다.')
     if X_Access_Token is None or X_Access_Token == 'null':
         return commonResponse(401, 'TOKEN_NOT_PROVIDED', '로그인 정보가 없습니다. 다시 로그인해주세요')
-    
+
     validation_result = await common_token_validation(X_Access_Token)
     if validation_result[0] != 200:
         return commonResponse(validation_result[0], validation_result[1], validation_result[2])
@@ -837,7 +840,6 @@ async def getJunharryTestResult(X_Access_Token: str = Header(None), group: int =
     if redisData is not None:
         redisData = json.loads(redisData)
         return commonResponse(200, data=redisData)
-
 
     # is_done 이 0이면 오류 반환
     sql = f"SELECT is_done FROM harrytest_userjoin WHERE user_idx = {user_idx}"
@@ -882,7 +884,7 @@ async def getJunharryTestResult(X_Access_Token: str = Header(None), group: int =
         data4 = res.fetchone()
         if data4 is None:
             return commonResponse(400, 'NO_DATA', '데이터가 없습니다.')
-        
+
         # 전체 데이터 결합
         total_data = {
             "question_idx": i+1,
@@ -927,7 +929,6 @@ async def getJunharryTestResult(X_Access_Token: str = Header(None), user_idx: in
         redisData = json.loads(redisData)
         return commonResponse(200, data=redisData)
 
-
     # is_done 이 0이면 오류 반환
     sql = f"SELECT is_done FROM harrytest_userjoin WHERE user_idx = {user_idx}"
     res = db2.execute(sql)
@@ -971,7 +972,7 @@ async def getJunharryTestResult(X_Access_Token: str = Header(None), user_idx: in
         data4 = res.fetchone()
         if data4 is None:
             return commonResponse(400, 'NO_DATA', '데이터가 없습니다.')
-        
+
         # 전체 데이터 결합
         total_data = {
             "question_idx": i+1,
@@ -1048,7 +1049,7 @@ def updateTwitchUserInfo(access_token):
     else:
         data = res.json()['data']
         return data[0]
-    
+
 
 @app.post('/gell', status_code=201, tags=["gellgell"], summary="gellgell 기록 등록")
 async def postGell(gell: gellData):
@@ -1190,4 +1191,3 @@ async def getGellIdx(idx: int):
         "rank": rank
     }
     return commonResponse(200, data=result)
-
